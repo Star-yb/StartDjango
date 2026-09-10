@@ -211,9 +211,9 @@ python manage.py server --host 0.0.0.0 --port 8000 --no-reload --workers 4
 
 `runserver` 仍然可用，但生成项目的预期启动方式是 `server`。Ninja 和异步视图都走 ASGI，和后面上线的进程模型也一致。
 
-## 总结
+## 最后
 
-StartDjango 做的是一件很具体的事：把 Django API 项目里那些每次都要重做的部分收成模板，选 DRF 或 Ninja 之后生成可运行的骨架，再用同一条 `python manage.py server` 把开发和部署串起来。模板可以改，生成器本身尽量不用动。
+如果 StartDjango 对你有帮助的话，欢迎 Star 或提 Issue。
 
 有问题、建议或想一起改模板，欢迎直接联系。
 
