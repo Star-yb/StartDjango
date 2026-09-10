@@ -6,10 +6,12 @@ Django 项目脚手架。选定 API 栈后，一键生成带认证、文档和�
 
 提供两套彼此独立的生成器：
 
-| 目录 | 栈 | 适合 |
-|------|-----|------|
-| `drf版本/` | Django REST Framework + SimpleJWT + Spectacular | 需要 Swagger / ReDoc 的 REST API |
-| `ninja版本/` | Django Ninja Extra + Ninja JWT | Schema 驱动、内置文档的 Ninja API |
+
+| 目录         | 栈                                               | 适合                            |
+| ---------- | ----------------------------------------------- | ----------------------------- |
+| `drf版本/`   | Django REST Framework + SimpleJWT + Spectacular | 需要 Swagger / ReDoc 的 REST API |
+| `ninja版本/` | Django Ninja Extra + Ninja JWT                  | Schema 驱动、内置文档的 Ninja API     |
+
 
 `django startproject` 只能交出空壳：没有 apps 分层、没有 JWT、没有统一响应、没有文档、启动方式也还是同步的 `runserver`。StartDjango 把这些反复要做的事收成一套可改的模板，生成出来就能继续写业务。
 
@@ -46,10 +48,12 @@ flowchart LR
   D --> H[可运行的业务项目]
 ```
 
-- **`start.py` / `start.bat`**：问项目名、路径、要不要虚拟环境，再按顺序调用后面两个脚本。
-- **`django-creator.py`**：校验名称，创建目录，用 **uv**（或 pip）装依赖，执行 `django startproject`。
-- **`django-helper.py`**：读 `templates/config.json`，拷贝 app 模板，合并或覆盖 `settings.py` / `urls.py`。
-- **`templates/`**：真正的产品形态。`apps/` 是应用骨架，`project/` 是路由和配置模板。
+
+
+- `start.py` **/** `start.bat`：问项目名、路径、要不要虚拟环境，再按顺序调用后面两个脚本。
+- `django-creator.py`：校验名称，创建目录，用 **uv**（或 pip）装依赖，执行 `django startproject`。
+- `django-helper.py`：读 `templates/config.json`，拷贝 app 模板，合并或覆盖 `settings.py` / `urls.py`。
+- `templates/`：真正的产品形态。`apps/` 是应用骨架，`project/` 是路由和配置模板。
 
 仓库结构：
 
@@ -115,6 +119,8 @@ python --version    # 应为 3.12 或更高
 uv --version
 ```
 
+
+
 ## 快速开始
 
 克隆后进入对应栈目录再运行，不要在仓库根目录启动。
@@ -148,6 +154,8 @@ python start.py myproject D:\projects
 python start.py myproject --no-venv
 ```
 
+
+
 ## 生成流程
 
 1. `django-creator.py` 创建 Django 项目、`.venv`，并用 uv（或 pip）安装依赖
@@ -157,6 +165,8 @@ python start.py myproject --no-venv
 
 - [drf版本/README.md](drf版本/README.md)
 - [ninja版本/README.md](ninja版本/README.md)
+
+
 
 ## 项目名称
 
@@ -186,15 +196,17 @@ python manage.py server
 
 常用参数：
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `--host` | `127.0.0.1` | 绑定地址，对外服务用 `0.0.0.0` |
-| `--port` | `8005` | 端口 |
-| `--reload` | 启用 | 代码变更后自动重启（开发） |
-| `--no-reload` | — | 关闭热重载（部署） |
-| `--workers` | `1` | 工作进程数；热重载只在 `workers=1` 时生效 |
-| `--log-level` | `info` | `critical` / `error` / `warning` / `info` / `debug` |
-| `--no-access-log` | — | 关闭访问日志 |
+
+| 参数                | 默认          | 说明                                                  |
+| ----------------- | ----------- | --------------------------------------------------- |
+| `--host`          | `127.0.0.1` | 绑定地址，对外服务用 `0.0.0.0`                                |
+| `--port`          | `8005`      | 端口                                                  |
+| `--reload`        | 启用          | 代码变更后自动重启（开发）                                       |
+| `--no-reload`     | —           | 关闭热重载（部署）                                           |
+| `--workers`       | `1`         | 工作进程数；热重载只在 `workers=1` 时生效                         |
+| `--log-level`     | `info`      | `critical` / `error` / `warning` / `info` / `debug` |
+| `--no-access-log` | —           | 关闭访问日志                                              |
+
 
 开发：
 
@@ -215,11 +227,17 @@ python manage.py server --host 0.0.0.0 --port 8000 --no-reload --workers 4
 
 如果 StartDjango 对你有帮助的话，欢迎 Star 或提 Issue。
 
+有条件的小伙伴可以支持一下，请我喝杯奶茶，十分感谢
+
+![架构示意](docs/images/1.png)
+
 有问题、建议或想一起改模板，欢迎直接联系。
 
 - **GitHub**：[Star-yb](https://github.com/Star-yb)
-- **邮箱**：starloongyibao@qq.com
+- **邮箱**：[starloongyibao@qq.com](mailto:starloongyibao@qq.com)
 - **相关项目**：[StarWeb](https://github.com/Star-yb/StarWeb)（FastAPI）、[Star-Go](https://github.com/Star-yb/Star-Go)（Gin）
+
+
 
 ## License
 
