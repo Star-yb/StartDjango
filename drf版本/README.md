@@ -1,4 +1,4 @@
-# StarDjango · DRF
+# StartDjango · DRF
 
 基于 Django REST Framework 的脚手架：生成项目后自动写入 JWT 认证、Swagger 文档、验证码和公共工具。
 
@@ -79,7 +79,7 @@ myproject/
 - Swagger / ReDoc 文档
 - SimpleUI 后台
 - CORS、软删除基础模型
-- `python manage.py server`（uvicorn）
+- `python manage.py server`（uvicorn ASGI，替代同步 `runserver`）
 
 ### API 端点
 
@@ -93,6 +93,8 @@ myproject/
 
 ## 创建后启动
 
+模板在 `apps/common/management/commands/server.py` 里提供了 uvicorn 的 ASGI 启动命令，开发和部署都用它，不再走同步 `runserver`。默认 `127.0.0.1:8005`。
+
 ```bash
 cd myproject
 source .venv/bin/activate      # Linux / macOS
@@ -100,14 +102,20 @@ source .venv/bin/activate      # Linux / macOS
 
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py runserver
+python manage.py server
 ```
+
+```bash
+python manage.py server --host 0.0.0.0 --port 8000 --no-reload --workers 4
+```
+
+`--host`、`--port`、`--reload` / `--no-reload`、`--workers`、`--log-level` 等参数说明见仓库根目录 [README.md](../README.md)。
 
 访问：
 
-- 首页：http://127.0.0.1:8000/
-- 后台：http://127.0.0.1:8000/admin/
-- 文档：http://127.0.0.1:8000/doc/swagger/
+- 首页：http://127.0.0.1:8005/
+- 后台：http://127.0.0.1:8005/admin/
+- 文档：http://127.0.0.1:8005/doc/swagger/
 
 ## 自定义模板
 

@@ -1,4 +1,4 @@
-# StarDjango · Ninja
+# StartDjango · Ninja
 
 基于 Django Ninja Extra 的脚手架：生成项目后自动写入 JWT 认证、验证码、Schema 驱动 API 和公共工具。
 
@@ -80,7 +80,7 @@ myproject/
 - 统一响应 Schema
 - 内置 API 文档
 - CORS、软删除基础模型
-- `python manage.py server`（uvicorn）
+- `python manage.py server`（uvicorn ASGI，替代同步 `runserver`）
 
 ### API 端点
 
@@ -96,6 +96,8 @@ Ninja 接口统一挂在 `/api/` 下，文档一般在 `/api/docs`。
 
 ## 创建后启动
 
+模板在 `apps/common/management/commands/server.py` 里提供了 uvicorn 的 ASGI 启动命令，开发和部署都用它，不再走同步 `runserver`。默认 `127.0.0.1:8005`。
+
 ```bash
 cd myproject
 source .venv/bin/activate      # Linux / macOS
@@ -103,14 +105,20 @@ source .venv/bin/activate      # Linux / macOS
 
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py runserver
+python manage.py server
 ```
+
+```bash
+python manage.py server --host 0.0.0.0 --port 8000 --no-reload --workers 4
+```
+
+`--host`、`--port`、`--reload` / `--no-reload`、`--workers`、`--log-level` 等参数说明见仓库根目录 [README.md](../README.md)。
 
 访问：
 
-- 首页：http://127.0.0.1:8000/
-- 后台：http://127.0.0.1:8000/admin/
-- 文档：http://127.0.0.1:8000/api/docs
+- 首页：http://127.0.0.1:8005/
+- 后台：http://127.0.0.1:8005/admin/
+- 文档：http://127.0.0.1:8005/api/docs
 
 ## 自定义模板
 
