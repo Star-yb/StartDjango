@@ -230,7 +230,7 @@ python manage.py server --host 0.0.0.0 --port 8000 --no-reload --workers 4
 有条件的小伙伴可以支持一下，请我喝杯奶茶，十分感谢
 
 <p align="center">
-  <img src="docs/1.png" alt="微信支付请我喝杯奶茶" width="280">
+  <img src="docs/images/1.png" alt="微信支付请我喝杯奶茶" width="280">
 </p>
 
 有问题、建议或想一起改模板，欢迎直接联系。
