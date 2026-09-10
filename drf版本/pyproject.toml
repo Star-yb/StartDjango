@@ -1,0 +1,22 @@
+[project]
+name = "graduationmall"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2.6",
+    "django-cors-headers>=4.8.0",
+    "django-filter>=25.1",
+    "django-model-utils>=5.0.0",
+    "django-mptt>=0.18.0",
+    "django-simple-captcha>=0.6.2",
+    "django-simpleui>=2025.6.24",
+    "djangorestframework-simplejwt>=5.5.1",
+    "drf-spectacular>=0.28.0",
+    "openpyxl>=3.1.5",
+    "pandas>=2.3.2",
+    "pillow>=11.3.0",
+    "requests>=2.32.5",
+    "uvicorn>=0.35.0",
+]

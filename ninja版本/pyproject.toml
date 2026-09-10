@@ -1,0 +1,28 @@
+[project]
+name = "NINJA"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.0.1",
+    "django-cors-headers>=4.9.0",
+    "django-model-utils>=5.0.0",
+    "django-mptt>=0.18.0",
+    "django-ninja>=1.5.1",
+    "django-ninja-crud>=0.6.2",
+    "django-ninja-extra>=0.30.8",
+    "django-ninja-jwt>=5.4.3",
+    "django-simple-captcha>=0.6.3",
+    "ninja-schema>=0.14.3",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.1",
+    "pillow>=12.1.1",
+    "requests>=2.32.5",
+    "uvicorn>=0.40.0",
+]
+
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

@@ -1,0 +1,10 @@
+{
+    "directories": ["media", "static", "templates", "logs"],
+    "apps": [
+      "accounts",
+      "common"
+    ],
+    "settings_template": "project/settings.py", 
+    "urls_template": "project/urls.py",
+    "env_manager": "uv"
+  }
