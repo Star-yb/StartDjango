@@ -261,19 +261,27 @@ def create_project(project_name, project_path, use_venv, template_name=None):
 def show_next_steps(project_name, project_path, use_venv):
     """显示后续操作步骤"""
     full_path = os.path.join(project_path, project_name)
-    
+    step_number = 1
+
     print("\n下一步操作:")
-    print(f"1. cd {full_path}")
-    
+    print(f"{step_number}. cd {full_path}")
+    step_number += 1
+
     if use_venv:
         if os.name == 'nt':  # Windows
-            print("2. .venv\\Scripts\\activate")
+            print(f"{step_number}. .venv\\Scripts\\activate")
         else:  # Unix-like
-            print("2. source .venv/bin/activate")
-    
-    print("3. python manage.py migrate")
-    print("4. python manage.py createsuperuser")
-    print("5. python manage.py runserver")
+            print(f"{step_number}. source .venv/bin/activate")
+        step_number += 1
+    else:
+        print(f"{step_number}. 自行安装依赖: uv sync  或  pip install -r requirements.txt")
+        step_number += 1
+
+    print(f"{step_number}. python manage.py migrate")
+    step_number += 1
+    print(f"{step_number}. python manage.py createsuperuser")
+    step_number += 1
+    print(f"{step_number}. python manage.py runserver")
     
     print("\n访问地址:")
     print("   应用首页: http://127.0.0.1:8000/")

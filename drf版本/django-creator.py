@@ -9,6 +9,7 @@ import subprocess
 import argparse
 import venv
 import keyword
+import secrets
 import importlib.util
 import json
 from pathlib import Path
@@ -110,8 +111,13 @@ class DjangoProjectCreator:
             if self.use_venv:
                 self._create_virtual_environment()
             
-            # 4. 安装依赖
-            self._install_dependencies()
+            # 4. 复制依赖清单；仅在创建虚拟环境时才安装依赖
+            self._copy_dependency_manifests()
+            if self.use_venv:
+                self._install_dependencies()
+            else:
+                print("已选择不创建虚拟环境：跳过全部依赖安装")
+                print("不会创建 .venv，也不会向系统 Python 安装任何包")
             
             # 5. 创建Django项目
             self._create_django_project()
@@ -233,13 +239,22 @@ class DjangoProjectCreator:
             self.use_venv = False
             self.venv_path = None
 
+    def _venv_python_path(self):
+        """返回项目 .venv 中的 Python 路径（文件不一定存在）。"""
+        venv_root = self.venv_path or os.path.join(self.project_root, '.venv')
+        if os.name == 'nt':
+            return os.path.join(venv_root, 'Scripts', 'python.exe')
+        return os.path.join(venv_root, 'bin', 'python')
+
     def _get_python_executable(self):
-        """获取Python可执行文件路径"""
-        if self.use_venv and self.venv_path:
-            if os.name == 'nt':  # Windows
-                return os.path.join(self.venv_path, 'Scripts', 'python.exe')
-            else:  # Unix-like
-                return os.path.join(self.venv_path, 'bin', 'python')
+        """按用户选择返回解释器：要虚拟环境才用 .venv，否则始终用系统 Python。"""
+        if self.use_venv:
+            venv_python = self._venv_python_path()
+            if os.path.isfile(venv_python):
+                return venv_python
+            print("未找到虚拟环境 Python，将使用系统 Python")
+            self.use_venv = False
+            self.venv_path = None
         return sys.executable
 
     def _prepare_pyproject(self, dest_pyproject):
@@ -274,24 +289,43 @@ url = "https://pypi.org/simple"
         with open(dest_pyproject, "w", encoding="utf-8") as f:
             f.write(pyproject_content)
 
+    def _read_pyproject_dependencies(self, pyproject_path):
+        """读取 pyproject.toml 里 [project].dependencies，避免和 requirements.txt 各装一套。"""
+        if not os.path.isfile(pyproject_path):
+            return []
+        with open(pyproject_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r"dependencies\s*=\s*\[(.*?)\]", content, re.S)
+        if not match:
+            return []
+        return re.findall(r'"([^"]+)"', match.group(1))
+
+    def _install_package_spec(self):
+        """安装参数：优先项目 pyproject.toml 的 dependencies，否则 requirements.txt。"""
+        dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
+        dependencies = self._read_pyproject_dependencies(dest_pyproject)
+        if dependencies:
+            return dependencies
+        if os.path.isfile(self.requirements_file):
+            return ["-r", self.requirements_file]
+        raise Exception(f"找不到可安装的依赖清单: {dest_pyproject} 或 {self.requirements_file}")
+
     def _install_with_uv_pip(self, index_url):
-        """用 uv pip 往当前虚拟环境装依赖，不依赖 venv 里是否已有 pip。"""
+        """用 uv pip 把依赖装进当前选定的解释器。系统 Python 需加 --system。"""
         python_cmd = self._get_python_executable()
-        subprocess.run(
-            [
-                "uv",
-                "pip",
-                "install",
-                "-r",
-                self.requirements_file,
-                "--python",
-                python_cmd,
-                "-i",
-                index_url,
-            ],
-            check=True,
-            cwd=self.project_root,
-        )
+        command = [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            python_cmd,
+            "-i",
+            index_url,
+        ]
+        if not self.use_venv:
+            command.append("--system")
+        command.extend(self._install_package_spec())
+        subprocess.run(command, check=True, cwd=self.project_root)
 
     def _install_with_python_pip(self, index_url):
         """用 python -m pip 安装依赖；若环境没有 pip 则先 ensurepip。"""
@@ -301,38 +335,36 @@ url = "https://pypi.org/simple"
             check=False,
             cwd=self.project_root,
         )
-        subprocess.run(
-            [
-                python_cmd,
-                "-m",
-                "pip",
-                "install",
-                "-r",
-                self.requirements_file,
-                "-i",
-                index_url,
-            ],
-            check=True,
-            cwd=self.project_root,
-        )
+        command = [
+            python_cmd,
+            "-m",
+            "pip",
+            "install",
+            "-i",
+            index_url,
+        ]
+        command.extend(self._install_package_spec())
+        subprocess.run(command, check=True, cwd=self.project_root)
+
+    def _copy_dependency_manifests(self):
+        """只复制依赖清单，不执行安装。"""
+        if os.path.isfile(self.pyproject_file):
+            dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
+            shutil.copy2(self.pyproject_file, dest_pyproject)
+            try:
+                self._prepare_pyproject(dest_pyproject)
+                print(f"已复制并更新 pyproject.toml: {dest_pyproject}")
+            except Exception as e:
+                print(f"更新 pyproject.toml 时出错，将继续使用原始文件: {e}")
 
     def _install_dependencies(self):
-        """安装依赖包。优先 uv sync，镜像失败时回退官方源，再回退 uv pip / pip。"""
+        """仅在创建虚拟环境时安装依赖。优先 uv sync，失败再回退 uv pip / pip。"""
         print("安装依赖包...")
         tuna_index = "https://pypi.tuna.tsinghua.edu.cn/simple"
         pypi_index = "https://pypi.org/simple"
 
-        if self.env_manager == "uv" and os.path.exists(self.pyproject_file):
-            dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
-            shutil.copy2(self.pyproject_file, dest_pyproject)
-            print(f"已复制 pyproject.toml 到项目目录: {dest_pyproject}")
-
-            try:
-                self._prepare_pyproject(dest_pyproject)
-                print("已根据项目名称和镜像源更新 pyproject.toml")
-            except Exception as e:
-                print(f"更新 pyproject.toml 时出错，将继续使用原始文件: {e}")
-
+        dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
+        if self.env_manager == "uv" and os.path.isfile(dest_pyproject):
             uv_sync_attempts = [
                 (["uv", "sync"], "清华镜像"),
                 (["uv", "sync", "--index-url", pypi_index], "官方 PyPI"),
@@ -345,11 +377,7 @@ url = "https://pypi.org/simple"
                     return
                 except (subprocess.CalledProcessError, FileNotFoundError) as e:
                     print(f"uv sync（{source_name}）失败: {e}")
-
             print("uv sync 失败，将回退到 uv pip / pip")
-
-        if not os.path.exists(self.requirements_file):
-            raise Exception(f"找不到requirements.txt文件: {self.requirements_file}")
 
         pip_attempts = [
             (self._install_with_uv_pip, tuna_index, "uv pip + 清华镜像"),
@@ -370,18 +398,163 @@ url = "https://pypi.org/simple"
 
         raise Exception(f"依赖包安装失败: {last_error}")
 
+    def _write_django_project_skeleton(self):
+        """不依赖本机是否已安装 Django，直接写出 startproject 骨架。"""
+        project_package = os.path.join(self.project_root, self.project_name)
+        os.makedirs(project_package, exist_ok=True)
+
+        secret_key = secrets.token_urlsafe(50)
+        manage_py = f'''#!/usr/bin/env python
+"""Django's command-line utility for administrative tasks."""
+import os
+import sys
+
+
+def main():
+    """Run administrative tasks."""
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{self.project_name}.settings")
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed and "
+            "available on your PYTHONPATH environment variable? Did you "
+            "forget to activate a virtual environment?"
+        ) from exc
+    execute_from_command_line(sys.argv)
+
+
+if __name__ == "__main__":
+    main()
+'''
+        init_py = ""
+        settings_py = f'''from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = "{secret_key}"
+
+DEBUG = True
+
+ALLOWED_HOSTS = []
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "{self.project_name}.urls"
+
+TEMPLATES = [
+    {{
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {{
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        }},
+    }},
+]
+
+WSGI_APPLICATION = "{self.project_name}.wsgi.application"
+
+DATABASES = {{
+    "default": {{
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }}
+}}
+
+AUTH_PASSWORD_VALIDATORS = [
+    {{"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"}},
+    {{"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"}},
+    {{"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"}},
+    {{"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"}},
+]
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "static/"
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+'''
+        urls_py = '''from django.contrib import admin
+from django.urls import path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+]
+'''
+        wsgi_py = f'''import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{self.project_name}.settings")
+
+application = get_wsgi_application()
+'''
+        asgi_py = f'''import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{self.project_name}.settings")
+
+application = get_asgi_application()
+'''
+
+        with open(os.path.join(self.project_root, "manage.py"), "w", encoding="utf-8") as f:
+            f.write(manage_py)
+        with open(os.path.join(project_package, "__init__.py"), "w", encoding="utf-8") as f:
+            f.write(init_py)
+        with open(os.path.join(project_package, "settings.py"), "w", encoding="utf-8") as f:
+            f.write(settings_py)
+        with open(os.path.join(project_package, "urls.py"), "w", encoding="utf-8") as f:
+            f.write(urls_py)
+        with open(os.path.join(project_package, "wsgi.py"), "w", encoding="utf-8") as f:
+            f.write(wsgi_py)
+        with open(os.path.join(project_package, "asgi.py"), "w", encoding="utf-8") as f:
+            f.write(asgi_py)
+
     def _create_django_project(self):
-        """创建Django项目"""
+        """创建Django项目。无虚拟环境时不调用本机 Django，只写骨架文件。"""
         print(f"创建Django项目: {self.project_name}")
-        
+
+        if not self.use_venv:
+            self._write_django_project_skeleton()
+            print("已写入 Django 项目骨架（未安装依赖，未调用系统 Django）")
+            return
+
         python_cmd = self._get_python_executable()
-        
+        print(f"使用 Python: {python_cmd}")
+
         original_cwd = os.getcwd()
         os.chdir(self.project_root)
-        
         try:
-            subprocess.run([python_cmd, '-m', 'django', 'startproject', 
-                          self.project_name, '.'], check=True)
+            subprocess.run(
+                [python_cmd, "-m", "django", "startproject", self.project_name, "."],
+                check=True,
+            )
             print("Django项目创建成功")
         except subprocess.CalledProcessError as e:
             raise Exception(f"Django项目创建失败: {e}")
@@ -408,8 +581,8 @@ url = "https://pypi.org/simple"
 
     def _copy_requirements(self):
         """复制requirements.txt到项目目录"""
-        # 如果当前使用 uv 管理依赖，则不再复制 requirements.txt
-        if self.env_manager == "uv":
+        # 仅在使用 uv + 虚拟环境时以 pyproject.toml 为准，不再复制 requirements.txt
+        if self.env_manager == "uv" and self.use_venv:
             print("当前使用 uv 管理依赖，不再复制 requirements.txt 到项目目录")
             return
 
@@ -425,11 +598,18 @@ url = "https://pypi.org/simple"
         print(f"项目位置: {self.project_root}")
         if self.use_venv:
             print(f"虚拟环境: {self.venv_path}")
+            print("依赖安装: 已完成")
+        else:
+            print("虚拟环境: 未创建")
+            print("依赖安装: 已跳过（未写入系统 Python）")
         
         print("\n基础结构:")
         print("- Django项目框架")
-        print("- 虚拟环境 (.venv)")
-        print("- 依赖包安装完成")
+        if self.use_venv:
+            print("- 虚拟环境 (.venv)")
+            print("- 依赖包安装完成")
+        else:
+            print("- 依赖清单已复制（pyproject.toml / requirements.txt）")
         print("- 基础目录 (media, static, templates)")
         
         print("\n注意: 项目结构优化将由django-helper.py完成")
