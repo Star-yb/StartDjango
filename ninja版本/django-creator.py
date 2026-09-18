@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import shutil
 import subprocess
@@ -210,9 +211,9 @@ class DjangoProjectCreator:
         if self.env_manager == "uv":
             try:
                 print("使用 uv 创建虚拟环境 (.venv)...")
-                # 在项目根目录下执行 uv venv .venv
+                # --seed 会安装 pip，避免后续回退 python -m pip 时找不到模块
                 subprocess.run(
-                    ["uv", "venv", ".venv"],
+                    ["uv", "venv", "--seed", ".venv"],
                     check=True,
                     cwd=self.project_root,
                 )
@@ -241,84 +242,133 @@ class DjangoProjectCreator:
                 return os.path.join(self.venv_path, 'bin', 'python')
         return sys.executable
 
-    def _install_dependencies(self):
-        """安装依赖包"""
-        print("安装依赖包...")
+    def _prepare_pyproject(self, dest_pyproject):
+        """把模板 pyproject.toml 的项目名和镜像源改成当前项目可用的配置。"""
+        with open(dest_pyproject, "r", encoding="utf-8") as f:
+            pyproject_content = f.read()
 
-        # 如果配置为使用 uv，并且存在 pyproject.toml，则使用 uv sync 管理依赖
-        if self.env_manager == "uv" and os.path.exists(self.pyproject_file):
-            try:
-                # 将工具目录下的 pyproject.toml 复制到项目根目录
-                dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
-                shutil.copy2(self.pyproject_file, dest_pyproject)
-                print(f"已复制 pyproject.toml 到项目目录: {dest_pyproject}")
+        pyproject_content = re.sub(
+            r'(?m)^name\s*=\s*"[^"]+"',
+            f'name = "{self.project_name}"',
+            pyproject_content,
+            count=1,
+        )
 
-                # 根据当前项目名称和镜像源，调整 pyproject.toml
-                try:
-                    with open(dest_pyproject, "r", encoding="utf-8") as f:
-                        pyproject_content = f.read()
-
-                    # 保证 [project] name 等于当前项目名
-                    if 'name = "NINJA"' in pyproject_content:
-                        pyproject_content = pyproject_content.replace(
-                            'name = "NINJA"',
-                            f'name = "{self.project_name}"',
-                        )
-
-                    # 为 uv 增加清华镜像配置（若尚未配置）
-                    if "[[tool.uv.index]]" not in pyproject_content:
-                        pyproject_content += """
+        if "[[tool.uv.index]]" not in pyproject_content:
+            pyproject_content += """
 
 [[tool.uv.index]]
+name = "tuna"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 """
-                    with open(dest_pyproject, "w", encoding="utf-8") as f:
-                        f.write(pyproject_content)
 
-                    print("已根据项目名称和镜像源更新 pyproject.toml")
-                except Exception as e:
-                    print(f"更新 pyproject.toml 时出错，将继续使用原始文件: {e}")
+        if 'url = "https://pypi.org/simple"' not in pyproject_content:
+            pyproject_content += """
 
-                print("使用 uv sync 安装依赖...")
-                subprocess.run(
-                    ["uv", "sync"],
-                    check=True,
-                    cwd=self.project_root,
-                )
-                print("依赖包安装完成（uv）")
-                return
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                print(f"使用 uv 安装依赖失败，将回退到 pip: {e}")
-                # 回退到 pip 安装 requirements.txt
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+"""
 
-        # 回退或默认：使用 pip + requirements.txt
+        with open(dest_pyproject, "w", encoding="utf-8") as f:
+            f.write(pyproject_content)
+
+    def _install_with_uv_pip(self, index_url):
+        """用 uv pip 往当前虚拟环境装依赖，不依赖 venv 里是否已有 pip。"""
+        python_cmd = self._get_python_executable()
+        subprocess.run(
+            [
+                "uv",
+                "pip",
+                "install",
+                "-r",
+                self.requirements_file,
+                "--python",
+                python_cmd,
+                "-i",
+                index_url,
+            ],
+            check=True,
+            cwd=self.project_root,
+        )
+
+    def _install_with_python_pip(self, index_url):
+        """用 python -m pip 安装依赖；若环境没有 pip 则先 ensurepip。"""
+        python_cmd = self._get_python_executable()
+        subprocess.run(
+            [python_cmd, "-m", "ensurepip", "--upgrade"],
+            check=False,
+            cwd=self.project_root,
+        )
+        subprocess.run(
+            [
+                python_cmd,
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                self.requirements_file,
+                "-i",
+                index_url,
+            ],
+            check=True,
+            cwd=self.project_root,
+        )
+
+    def _install_dependencies(self):
+        """安装依赖包。优先 uv sync，镜像失败时回退官方源，再回退 uv pip / pip。"""
+        print("安装依赖包...")
+        tuna_index = "https://pypi.tuna.tsinghua.edu.cn/simple"
+        pypi_index = "https://pypi.org/simple"
+
+        if self.env_manager == "uv" and os.path.exists(self.pyproject_file):
+            dest_pyproject = os.path.join(self.project_root, "pyproject.toml")
+            shutil.copy2(self.pyproject_file, dest_pyproject)
+            print(f"已复制 pyproject.toml 到项目目录: {dest_pyproject}")
+
+            try:
+                self._prepare_pyproject(dest_pyproject)
+                print("已根据项目名称和镜像源更新 pyproject.toml")
+            except Exception as e:
+                print(f"更新 pyproject.toml 时出错，将继续使用原始文件: {e}")
+
+            uv_sync_attempts = [
+                (["uv", "sync"], "清华镜像"),
+                (["uv", "sync", "--index-url", pypi_index], "官方 PyPI"),
+            ]
+            for command, source_name in uv_sync_attempts:
+                try:
+                    print(f"使用 uv sync 安装依赖（{source_name}）...")
+                    subprocess.run(command, check=True, cwd=self.project_root)
+                    print(f"依赖包安装完成（uv / {source_name}）")
+                    return
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    print(f"uv sync（{source_name}）失败: {e}")
+
+            print("uv sync 失败，将回退到 uv pip / pip")
+
         if not os.path.exists(self.requirements_file):
             raise Exception(f"找不到requirements.txt文件: {self.requirements_file}")
 
-        python_cmd = self._get_python_executable()
+        pip_attempts = [
+            (self._install_with_uv_pip, tuna_index, "uv pip + 清华镜像"),
+            (self._install_with_uv_pip, pypi_index, "uv pip + 官方 PyPI"),
+            (self._install_with_python_pip, tuna_index, "pip + 清华镜像"),
+            (self._install_with_python_pip, pypi_index, "pip + 官方 PyPI"),
+        ]
+        last_error = None
+        for installer, index_url, label in pip_attempts:
+            try:
+                print(f"正在使用 {label} 安装依赖...")
+                installer(index_url)
+                print(f"依赖包安装完成（{label}）")
+                return
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"{label} 失败: {e}")
+                last_error = e
 
-        try:
-            # 使用清华镜像源安装依赖
-            print("  正在从清华镜像源安装依赖...")
-            subprocess.run(
-                [
-                    python_cmd,
-                    "-m",
-                    "pip",
-                    "install",
-                    "-r",
-                    self.requirements_file,
-                    "-i",
-                    "https://pypi.tuna.tsinghua.edu.cn/simple",
-                ],
-                check=True,
-                cwd=self.project_root,
-            )
-            print("依赖包安装完成（pip）")
-
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"依赖包安装失败: {e}")
+        raise Exception(f"依赖包安装失败: {last_error}")
 
     def _create_django_project(self):
         """创建Django项目"""
